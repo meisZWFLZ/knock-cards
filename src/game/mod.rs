@@ -6,7 +6,7 @@ mod turn;
 pub use cards::{Face, PhysicalCard, Suit, VirtualCard};
 pub use pile::{DiscardPile, Pile, StockPile};
 pub use player::{Brain, Player};
-pub use turn::{PileType, PublicTurn};
+pub use turn::{PileType, PrivateTurn, PublicTurn, Turn};
 
 use rand::SeedableRng as _;
 
@@ -35,11 +35,83 @@ impl GamePiles {
     }
 }
 
+/// A Lap is a round of turns where each player takes one turn.
+/// This differentiates it from a "round" which might be a full game from shuffle to scoring.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Lap {
+    /// Should have the same length as the number of players in the game, unless this is the current lap.
+    pub turns: Vec<PrivateTurn>,
+}
+impl Lap {
+    pub fn new_empty() -> Self {
+        Self { turns: Vec::new() }
+    }
+    pub fn view_as_player<'a>(&'a self, player_index: usize) -> LapView<'a> {
+        LapView::new(self, player_index)
+    }
+}
+
+/// A LapView is a view of a lap from the perspective of a single player, where they can only see private info
+/// about their own turn, and public info about other players' turns.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct LapView<'a> {
+    lap: &'a Lap,
+    player_index: usize,
+}
+impl<'a> LapView<'a> {
+    pub fn new(lap: &'a Lap, player_index: usize) -> LapView {
+        LapView { lap, player_index }
+    }
+    pub fn iter(&'a self) -> impl Iterator<Item = Turn> + 'a {
+        self.lap.turns.iter().enumerate().map(|(i, turn)| {
+            if i == self.player_index {
+                Turn::Private(turn.clone())
+            } else {
+                Turn::Public(turn.to_owned().into())
+            }
+        })
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct History {
+    pub rounds: Vec<Lap>,
+}
+impl History {
+    pub fn new_empty() -> Self {
+        Self { rounds: Vec::new() }
+    }
+    pub fn view_as_player<'a>(&'a self, player_index: usize) -> HistoryView<'a> {
+        HistoryView::new(self, player_index)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct HistoryView<'a> {
+    history: &'a History,
+    player_index: usize,
+}
+impl<'a> HistoryView<'a> {
+    pub fn new(history: &'a History, player_index: usize) -> HistoryView {
+        HistoryView {
+            history,
+            player_index,
+        }
+    }
+    pub fn iter(&'a self) -> impl Iterator<Item = LapView<'a>> + 'a {
+        self.history
+            .rounds
+            .iter()
+            .map(move |lap| LapView::new(lap, self.player_index))
+    }
+}
+
 #[derive(Debug)]
 pub struct Game {
     players: Vec<Player>,
     piles: GamePiles,
     config: GameConfig,
+    history: History,
 }
 
 impl Game {
@@ -57,16 +129,19 @@ impl Game {
                 );
             }
         }
-        let players = grids
-            .into_iter()
-            .zip(brains.into_iter())
-            .map(|(grid, brain)| Player::new(grid, brain, config))
-            .collect();
-        Self {
-            players,
+        let mut result = Game {
+            players: Vec::new(),
             piles,
             config,
-        }
+            history: History::new_empty(),
+        };
+        result.players = grids
+            .into_iter()
+            .zip(brains.into_iter())
+            .enumerate()
+            .map(|(index, (grid, brain))| Player::new(grid, brain))
+            .collect();
+        result
     }
     fn play(mut self) -> Vec<u32> {
         'outer: loop {
@@ -78,9 +153,6 @@ impl Game {
                 todo!("Update history");
             }
         }
-        self.players
-            .iter()
-            .map(|player| player.score())
-            .collect()
+        self.players.iter().map(|player| player.score()).collect()
     }
 }

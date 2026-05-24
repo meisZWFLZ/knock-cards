@@ -1,8 +1,7 @@
 use std::{fmt::Debug, mem::swap};
 
 use crate::game::{
-    GameConfig, GamePiles, PhysicalCard, PileType, VirtualCard,
-    turn::{PrivateTurn, Turn},
+    GameConfig, GamePiles, HistoryView, PhysicalCard, PileType, VirtualCard, turn::{PrivateTurn, Turn}
 };
 
 #[derive(Debug)]
@@ -10,11 +9,10 @@ pub struct Player {
     /// Doesn't necessarily have to be a grid, but it differentiates from terms like "hand"
     grid: Vec<PhysicalCard>,
     brain: Box<dyn Brain>,
-    brain_state: BrainState,
 }
 
 impl Player {
-    pub fn new(grid: Vec<PhysicalCard>, brain: Box<dyn Brain>, game_config: GameConfig) -> Self {
+    pub fn new(grid: Vec<PhysicalCard>, brain: Box<dyn Brain>) -> Self {
         let initial_revealed_cards = grid
             .iter()
             .take(game_config.revealed_num)
@@ -23,11 +21,6 @@ impl Player {
         Self {
             grid,
             brain,
-            brain_state: BrainState {
-                history: History::new_empty(),
-                game_config,
-                initial_revealed_cards,
-            },
         }
     }
     pub fn score(&self) -> u32 {
@@ -37,32 +30,10 @@ impl Player {
         *self
             .brain
             .take_turn(
-                &self.brain_state,
+                &self.game_info,
                 DrawPlayerInterface::new(piles, &mut self.grid),
             )
             .get_turn()
-    }
-}
-
-/// A Lap is a round of turns where each player takes one turn.
-/// This differentiates it from a "round" which might be a full game from shuffle to scoring.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Lap {
-    /// Should have the same length as the number of players in the game, unless this is the current lap.
-    pub turns: Vec<Turn>,
-}
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct History {
-    pub rounds: Vec<Lap>,
-}
-impl Lap {
-    pub fn new_empty() -> Self {
-        Self { turns: Vec::new() }
-    }
-}
-impl History {
-    pub fn new_empty() -> Self {
-        Self { rounds: Vec::new() }
     }
 }
 
@@ -81,13 +52,13 @@ impl PlayerAction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub struct DrawPlayerInterface<'a> {
     game_piles: &'a mut GamePiles,
     player_grid: &'a mut Vec<PhysicalCard>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub struct SwapPlayerInterface<'a, const DREW_FROM_DISCARD: bool> {
     game_piles: &'a mut GamePiles,
     player_grid: &'a mut Vec<PhysicalCard>,
@@ -175,12 +146,12 @@ impl<'a> DrawPlayerInterface<'a> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct BrainState {
-    pub history: History,
+pub struct GameInfo<'a> {
+    pub history: HistoryView<'a>,
     pub game_config: GameConfig,
     pub initial_revealed_cards: Vec<VirtualCard>,
 }
 
 pub trait Brain: Debug {
-    fn take_turn(&mut self, state: &BrainState, interface: DrawPlayerInterface) -> PlayerAction;
+    fn take_turn(&mut self, state: &GameInfo, interface: DrawPlayerInterface) -> PlayerAction;
 }
