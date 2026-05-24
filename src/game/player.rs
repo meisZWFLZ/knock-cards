@@ -13,11 +13,6 @@ pub struct Player {
 
 impl Player {
     pub fn new(grid: Vec<PhysicalCard>, brain: Box<dyn Brain>) -> Self {
-        let initial_revealed_cards = grid
-            .iter()
-            .take(game_config.revealed_num)
-            .map(|card| card.into())
-            .collect();
         Self {
             grid,
             brain,
@@ -26,11 +21,11 @@ impl Player {
     pub fn score(&self) -> u32 {
         self.grid.iter().map(|card| card.value() as u32).sum()
     }
-    pub fn take_turn(&mut self, piles: &mut GamePiles) -> PrivateTurn {
+    pub fn take_turn(&mut self, piles: &mut GamePiles, game_info: &GameInfo) -> PrivateTurn {
         *self
             .brain
             .take_turn(
-                &self.game_info,
+                game_info,
                 DrawPlayerInterface::new(piles, &mut self.grid),
             )
             .get_turn()

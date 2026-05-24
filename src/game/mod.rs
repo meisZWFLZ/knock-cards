@@ -5,7 +5,7 @@ mod turn;
 
 pub use cards::{Face, PhysicalCard, Suit, VirtualCard};
 pub use pile::{DiscardPile, Pile, StockPile};
-pub use player::{Brain, Player};
+pub use player::{Brain, Player, GameInfo};
 pub use turn::{PileType, PrivateTurn, PublicTurn, Turn};
 
 use rand::SeedableRng as _;
@@ -145,11 +145,16 @@ impl Game {
     }
     fn play(mut self) -> Vec<u32> {
         'outer: loop {
-            for player in &mut self.players {
+            for player_index in 0..self.players.len() {
                 if todo!("Player knocked a round before") {
                     break 'outer;
                 }
-                let turn = player.take_turn(&mut self.piles);
+                let game_info = GameInfo {
+                    history: self.history.view_as_player(player_index),
+                    game_config: self.config,
+                    initial_revealed_cards: Vec::new(), // TODO: populate from initial reveal
+                };
+                let turn = self.players[player_index].take_turn(&mut self.piles, &game_info);
                 todo!("Update history");
             }
         }
